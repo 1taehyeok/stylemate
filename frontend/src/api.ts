@@ -31,6 +31,7 @@ export interface GenerationResult {
     status: string
     images: GeneratedImage[]
     total: number
+    recommended_items: ItemResponse[]
 }
 
 export interface ItemResponse {
