@@ -1,0 +1,50 @@
+# ===== Node / Frontend =====
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# ===== Python / Backend =====
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+
+# ===== Environment & Secrets =====
+.env
+.env.local
+.env.*.local
+
+# ===== Database =====
+*.db
+*.sqlite3
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+
+# ===== Lint output files =====
+eslint_out.txt
+eslint_output.txt
+eslint_output_utf8.txt
+eslint_verify.txt
+
+# ===== Electron Build =====
+release/
+out/
