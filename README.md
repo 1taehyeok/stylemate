@@ -78,6 +78,12 @@ copy .env.example .env       # Windows
 # cp .env.example .env       # macOS/Linux
 # .env 파일을 열어 API 키를 입력하세요
 
+# DB 마이그레이션 적용 (권장)
+alembic upgrade head
+
+# 샘플 카탈로그 데이터 적재 (선택)
+python scripts/import_items.py --csv data/sample_items.csv
+
 # 서버 실행
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -106,7 +112,16 @@ npm run dev
 | `HOST` | 서버 호스트 | `0.0.0.0` |
 | `PORT` | 서버 포트 | `8000` |
 | `FRONTEND_URL` | 프론트엔드 URL (CORS) | `http://localhost:5173` |
+| `DB_URL` | 비동기 SQLAlchemy DB URL | `sqlite+aiosqlite:///./stylemate.db` |
+| `AUTO_CREATE_TABLES` | 앱 시작 시 create_all 실행 여부 | `false` |
 
 ## 📜 라이선스
 
 This project is for personal/educational use.
+
+
+## 🗃️ DB 마이그레이션/시드
+
+- 마이그레이션 생성/적용은 Alembic을 사용합니다.
+- 운영 환경에서는 `AUTO_CREATE_TABLES=false`를 유지하고 `alembic upgrade head`로 스키마를 관리하세요.
+- 샘플 데이터는 `backend/data/sample_items.csv`와 `backend/scripts/import_items.py`를 사용해 적재할 수 있습니다.

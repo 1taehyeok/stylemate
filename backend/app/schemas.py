@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -43,14 +43,6 @@ class GeneratedImageResponse(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class GenerationResultResponse(BaseModel):
-    """Full generation result with all images."""
-    task_id: str
-    status: str
-    images: list[GeneratedImageResponse]
-    total: int
-
-
 class ItemResponse(BaseModel):
     """Clothing item response."""
     id: int
@@ -66,3 +58,12 @@ class ItemResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GenerationResultResponse(BaseModel):
+    """Full generation result with generated images and recommended catalog items."""
+    task_id: str
+    status: str
+    images: list[GeneratedImageResponse]
+    total: int
+    recommended_items: list[ItemResponse] = Field(default_factory=list)
