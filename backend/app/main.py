@@ -28,9 +28,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"   AI Provider: {settings.ai_provider}")
     logger.info(f"   Images Dir : {settings.images_dir}")
 
-    # Create tables
-    await init_db()
-    logger.info("   Database initialized.")
+    # Optional fallback table creation (recommended: use Alembic migrations)
+    if settings.auto_create_tables:
+        await init_db()
+        logger.info("   Database initialized with create_all.")
+    else:
+        logger.info("   Skipping create_all (run Alembic migrations instead).")
 
     # Ensure images directory exists
     os.makedirs(settings.images_dir, exist_ok=True)
