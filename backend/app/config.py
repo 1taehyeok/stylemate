@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     images_dir: str = ""
     db_url: str = ""
+    auto_create_tables: bool = False
 
     def model_post_init(self, __context):
         if not self.images_dir:
