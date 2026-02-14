@@ -8,31 +8,39 @@ export default function ItemDetailPage() {
 
     if (!selectedItem) {
         return (
-            <div className="flex items-center justify-center h-full">
-                <p>아이템을 선택해주세요</p>
+            <div className="flex flex-col items-center justify-center h-full bg-gray-50 text-gray-500 gap-3">
+                <p>선택된 아이템이 없습니다.</p>
+                <button
+                    onClick={prevStep}
+                    className="px-4 py-2 rounded-md border border-gray-300 text-sm bg-white"
+                >
+                    이전 화면으로
+                </button>
             </div>
         )
     }
+
+    const hasRealImage = selectedItem.imageUrl && !selectedItem.imageUrl.includes('placeholder')
 
     return (
         <div className="flex flex-col h-full bg-gray-50">
             <div className="flex-shrink-0 px-6">
                 <Header />
+            </div>
 
+            {/* Main Content */}
+            <div className="flex-1 overflow-y-auto px-6 pb-4">
                 <motion.h2
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="text-xl font-bold text-gray-800 mt-2 mb-4 text-center"
+                    className="text-2xl font-bold text-gray-800 mt-2 mb-6 text-center"
                 >
-                    마음에 맞는 스타일 자세히 보기!
+                    스타일 상세 정보
                 </motion.h2>
-            </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-4">
-                <div className="flex gap-6 max-w-lg mx-auto">
-                    {/* Full Size Image */}
+                <div className="flex gap-4 items-start">
+                    {/* Model Image */}
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -40,16 +48,24 @@ export default function ItemDetailPage() {
                         className="w-48 flex-shrink-0"
                     >
                         <div className="aspect-[3/5] bg-gradient-to-b from-gray-100 to-gray-200 
-                            rounded-xl flex items-center justify-center shadow-sm">
-                            <svg className="w-20 h-32 text-gray-300" viewBox="0 0 80 130" fill="none" stroke="currentColor" strokeWidth="1">
-                                <circle cx="40" cy="18" r="10" />
-                                <path d="M40 28 L40 70" />
-                                <path d="M40 38 L25 55" />
-                                <path d="M40 38 L55 55" />
-                                <path d="M40 70 L30 120" />
-                                <path d="M40 70 L50 120" />
-                                <path d="M30 40 Q40 75 50 40" strokeDasharray="2,2" />
-                            </svg>
+                            rounded-xl flex items-center justify-center shadow-sm overflow-hidden">
+                            {hasRealImage ? (
+                                <img
+                                    src={selectedItem.imageUrl}
+                                    alt={selectedItem.name}
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <svg className="w-20 h-32 text-gray-300" viewBox="0 0 80 130" fill="none" stroke="currentColor" strokeWidth="1">
+                                    <circle cx="40" cy="18" r="10" />
+                                    <path d="M40 28 L40 70" />
+                                    <path d="M40 38 L25 55" />
+                                    <path d="M40 38 L55 55" />
+                                    <path d="M40 70 L30 120" />
+                                    <path d="M40 70 L50 120" />
+                                    <path d="M30 40 Q40 75 50 40" strokeDasharray="2,2" />
+                                </svg>
+                            )}
                         </div>
                     </motion.div>
 
@@ -65,17 +81,19 @@ export default function ItemDetailPage() {
                                 아이템 정보
                             </h3>
                             <div className="space-y-2 text-sm">
-                                <p className="text-gray-700 font-medium">{selectedItem.description || '이지핏 베리시 블레이저'}</p>
-                                <p className="text-gray-500">(상의) {selectedItem.price}</p>
+                                <p className="text-gray-800 font-semibold">{selectedItem.name}</p>
+                                <p className="text-gray-700">{selectedItem.description}</p>
                                 <div className="border-t border-gray-50 pt-2">
-                                    <p className="text-gray-500">재고: {selectedItem.stock || 'M(5), L(3)'}</p>
+                                    <p className="text-gray-500">카테고리: {selectedItem.category}</p>
                                 </div>
                                 <div className="border-t border-gray-50 pt-2">
-                                    <p className="text-gray-500">세미마이드 플레어 (하)</p>
+                                    <p className="text-gray-500">가격: {selectedItem.price}</p>
                                 </div>
                                 <div className="border-t border-gray-50 pt-2">
-                                    <p className="text-gray-500">세미마이드 플레어 M(3) 남음</p>
-                                    <p className="text-gray-700 font-semibold mt-1">{selectedItem.price}</p>
+                                    <p className="text-gray-500">재고: {selectedItem.stock}</p>
+                                </div>
+                                <div className="border-t border-gray-50 pt-2">
+                                    <p className="text-gray-500">매장 위치: {selectedItem.location}</p>
                                 </div>
                             </div>
                         </div>

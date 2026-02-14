@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '../store'
 import Header from '../components/Header'
 import BackButton from '../components/BackButton'
 
-const tabs = ['전체', '추천순', '데일리룩', '오피스룩']
-
 export default function ResultsPage() {
     const { results, setSelectedItem, nextStep } = useAppStore()
     const [activeTab, setActiveTab] = useState('전체')
+
+    const tabs = useMemo(() => {
+        const categories = Array.from(new Set(results.map((r) => r.category).filter(Boolean)))
+        return ['전체', ...categories]
+    }, [results])
 
     const filteredResults = activeTab === '전체'
         ? results
@@ -102,6 +105,7 @@ export default function ResultsPage() {
                                     )}
                                 </div>
                                 <div className="p-2 text-left">
+                                    <p className="text-xs text-gray-800 truncate">{item.name}</p>
                                     <span className="text-xs text-gray-500">{item.price}</span>
                                 </div>
                             </motion.button>

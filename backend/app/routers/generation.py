@@ -9,8 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import GeneratedImage
-from app.schemas import GenerateRequest, GenerateResponse, GenerationResultResponse, GeneratedImageResponse
+from app.models import GeneratedImage, ClothingItem
+from app.schemas import (
+    GenerateRequest,
+    GenerateResponse,
+    GenerationResultResponse,
+    GeneratedImageResponse,
+    ItemResponse,
+)
 from app.config import get_settings
 from app.services.ai_service import (
     get_ai_provider,
@@ -24,6 +30,25 @@ router = APIRouter(prefix="/api", tags=["generation"])
 
 # In-memory task status tracking
 _task_status: dict[str, str] = {}
+
+
+def _format_price(price: int) -> str:
+    return f"₩{price:,}"
+
+
+def _to_item_response(item: ClothingItem) -> ItemResponse:
+    return ItemResponse(
+        id=item.id,
+        name=item.name,
+        description=item.description,
+        price=item.price,
+        price_display=_format_price(item.price),
+        category=item.category,
+        image_url=f"/static/images/{item.image_path}" if item.image_path else None,
+        stock_info=item.stock_info,
+        location=item.location,
+        gender=item.gender,
+    )
 
 
 async def _generate_images_task(
@@ -129,7 +154,7 @@ async def generate_styles(
 
 @router.get("/results/{task_id}", response_model=GenerationResultResponse)
 async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
-    """Poll generation results by task_id."""
+    """Poll generation results by task_id, including recommended catalog items."""
     status = _task_status.get(task_id, "unknown")
 
     result = await db.execute(
@@ -138,6 +163,27 @@ async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
         .order_by(GeneratedImage.id)
     )
     images = result.scalars().all()
+
+    recommended_items: list[ClothingItem] = []
+
+    if images:
+        gender = images[0].gender
+        categories = list(dict.fromkeys([img.category for img in images if img.category]))
+
+        if categories:
+            item_query = select(ClothingItem).where(ClothingItem.category.in_(categories))
+            if gender:
+                item_query = item_query.where(ClothingItem.gender == gender)
+            item_result = await db.execute(item_query.order_by(ClothingItem.id).limit(12))
+            recommended_items = item_result.scalars().all()
+
+        # Fallback: if no category match, return recent items by gender
+        if not recommended_items:
+            fallback_query = select(ClothingItem)
+            if gender:
+                fallback_query = fallback_query.where(ClothingItem.gender == gender)
+            fallback_result = await db.execute(fallback_query.order_by(ClothingItem.id.desc()).limit(12))
+            recommended_items = fallback_result.scalars().all()
 
     return GenerationResultResponse(
         task_id=task_id,
@@ -153,4 +199,5 @@ async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
             for img in images
         ],
         total=len(images),
+        recommended_items=[_to_item_response(item) for item in recommended_items],
     )

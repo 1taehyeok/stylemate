@@ -7,6 +7,13 @@ import BackButton from '../components/BackButton'
 
 const fitOptions: Fit[] = ['오버핏', '슬림핏', '정핏']
 
+const categoryLabelMap: Record<string, string> = {
+    daily: '데일리룩',
+    office: '오피스룩',
+    date: '데이트룩',
+    active: '액티브룩',
+}
+
 export default function LoadingPage() {
     const { nextStep, height, setHeight, fit, setFit, setResults, gender, tpo } = useAppStore()
     const [progress, setProgress] = useState(0)
@@ -36,17 +43,25 @@ export default function LoadingPage() {
                         const result = await getGenerationResults(taskIdRef.current)
 
                         if (result.status === 'completed' && result.images.length > 0) {
-                            // Convert to ResultItem format
-                            const items: ResultItem[] = result.images.map((img, i) => ({
-                                id: img.id,
-                                imageUrl: getImageUrl(img.image_url),
-                                name: `스타일 ${i + 1}`,
-                                price: `₩${((Math.floor(Math.random() * 10) + 3) * 10000).toLocaleString()}`,
-                                category: img.category || '추천순',
-                                stock: `M(${Math.floor(Math.random() * 10)}), L(${Math.floor(Math.random() * 5)})`,
-                                location: '강남점 2F',
-                                description: '세미마이드 플레어 블레이저',
-                            }))
+                            const catalog = result.recommended_items
+
+                            // Convert to ResultItem format using real catalog data
+                            const items: ResultItem[] = result.images.map((img, i) => {
+                                const matched = catalog.length > 0 ? catalog[i % catalog.length] : null
+                                const normalizedCategory = img.category || matched?.category || '추천'
+
+                                return {
+                                    id: img.id,
+                                    imageUrl: getImageUrl(img.image_url),
+                                    name: matched?.name || `스타일 ${i + 1}`,
+                                    price: matched?.price_display || '가격 정보 없음',
+                                    category: categoryLabelMap[normalizedCategory] || normalizedCategory,
+                                    stock: matched?.stock_info || '재고 정보 없음',
+                                    location: matched?.location || '매장 정보 없음',
+                                    description: matched?.description || '상품 설명 없음',
+                                }
+                            })
+
                             setResults(items)
                             if (pollingRef.current) clearInterval(pollingRef.current)
                             setProgress(100)
