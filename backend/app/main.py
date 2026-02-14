@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import init_db
 from app.routers import generation, items
+from app.routers import outfit_preview
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +69,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Include routers
 app.include_router(generation.router)
 app.include_router(items.router)
+app.include_router(outfit_preview.router)
 
 
 @app.get("/")

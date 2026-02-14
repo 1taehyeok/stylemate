@@ -19,7 +19,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models import ClothingItem
+from app.models import ClothingItem, ClothingItemFeature
 
 
 REQUIRED_COLUMNS = {"name", "price", "category", "gender", "stock_info", "location"}
@@ -44,6 +44,16 @@ def validate_row(row: dict[str, str], row_number: int) -> tuple[bool, str | None
         return False, f"row {row_number}: invalid integer price '{row['price']}'"
 
     return True, None
+
+
+def infer_feature_defaults(category: str) -> dict[str, str | int]:
+    if category == "office":
+        return {"item_type": "top", "style": "formal", "season": "all", "formality": 5, "warmth": 3}
+    if category == "active":
+        return {"item_type": "bottom", "style": "sporty", "season": "all", "formality": 1, "warmth": 2}
+    if category == "date":
+        return {"item_type": "onepiece", "style": "casual", "season": "spring", "formality": 3, "warmth": 2}
+    return {"item_type": "top", "style": "casual", "season": "all", "formality": 2, "warmth": 2}
 
 
 async def upsert_items(csv_path: Path) -> None:
@@ -90,11 +100,33 @@ async def upsert_items(csv_path: Path) -> None:
                         **payload,
                     )
                     db.add(item)
+                    await db.flush()
                     created += 1
                 else:
                     for key, value in payload.items():
                         setattr(item, key, value)
                     updated += 1
+
+                feature_defaults = infer_feature_defaults(row["category"])
+                feat_stmt = select(ClothingItemFeature).where(ClothingItemFeature.item_id == item.id)
+                feat_result = await db.execute(feat_stmt)
+                feature = feat_result.scalar_one_or_none()
+
+                feature_payload = {
+                    "item_type": row.get("item_type") or feature_defaults["item_type"],
+                    "color": row.get("color") or None,
+                    "style": row.get("style") or feature_defaults["style"],
+                    "season": row.get("season") or feature_defaults["season"],
+                    "fit": row.get("fit") or None,
+                    "formality": int(row["formality"]) if row.get("formality") else feature_defaults["formality"],
+                    "warmth": int(row["warmth"]) if row.get("warmth") else feature_defaults["warmth"],
+                }
+
+                if feature is None:
+                    db.add(ClothingItemFeature(item_id=item.id, **feature_payload))
+                else:
+                    for key, value in feature_payload.items():
+                        setattr(feature, key, value)
 
             await db.commit()
 

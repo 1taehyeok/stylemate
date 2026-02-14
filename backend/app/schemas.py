@@ -67,3 +67,31 @@ class GenerationResultResponse(BaseModel):
     images: list[GeneratedImageResponse]
     total: int
     recommended_items: list[ItemResponse] = Field(default_factory=list)
+
+
+class ClothingFeatureResponse(BaseModel):
+    item_type: str
+    color: Optional[str] = None
+    style: Optional[str] = None
+    season: Optional[str] = None
+    fit: Optional[str] = None
+    formality: Optional[int] = None
+    warmth: Optional[int] = None
+
+
+class OutfitPreviewItem(BaseModel):
+    id: int
+    name: str
+    image_url: Optional[str] = None
+    item_type: str
+
+
+class OutfitPreviewResponse(BaseModel):
+    score: int
+    reason: str
+    items: list[OutfitPreviewItem]
+
+
+class OutfitPreviewListResponse(BaseModel):
+    total: int
+    combos: list[OutfitPreviewResponse]
