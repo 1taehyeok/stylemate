@@ -1,0 +1,10 @@
+﻿name,description,price,category,image_path,stock_info,location,gender,item_type,color,style,season,fit,formality,warmth
+Black Rib Knit,Basic slim black knit top,59000,daily,men_top.jpg,"M(5), L(4)",2F,men,top,black,casual,fall,slim,2,3
+Green Half Zip Sweatshirt,Half zip sweatshirt for active casual looks,69000,active,men_top2.jpg,"M(4), L(4)",3F,men,top,green,sporty,all,regular,1,3
+Ivory Graphic Sweatshirt,Daily graphic sweatshirt in ivory,49000,daily,men_top3.jpg,"M(6), L(4)",2F,men,top,ivory,casual,fall,regular,2,3
+Black Short Puffer,Short puffer jacket with high warmth,159000,daily,men_outer1.jpg,"M(3), L(2)",3F,men,outer,black,casual,winter,regular,2,5
+Gray Fleece Zip Up,Lightweight fleece outer for fall and winter,79000,daily,men_outer2.png,"M(4), L(3)",2F,men,outer,gray,casual,fall,regular,2,4
+Khaki Bomber Jacket,Casual bomber jacket for mid season,119000,daily,men_outer3.jpg.png,"M(3), L(3)",2F,men,outer,khaki,casual,fall,regular,2,3
+Olive Cargo Pants,Utility cargo pants with relaxed fit,89000,active,men_bottom1.png,"30(4), 32(4)",3F,men,bottom,olive,sporty,all,over,1,2
+Blue Wide Denim,Wide fit daily denim jeans,79000,daily,men_bottom2.png,"30(5), 32(4)",2F,men,bottom,blue,casual,all,over,2,2
+Beige Tapered Slacks,Formal tapered slacks for office style,99000,office,men_bottom3.png,"30(3), 32(3)",2F,men,bottom,beige,formal,all,regular,4,2
