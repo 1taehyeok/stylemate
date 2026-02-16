@@ -115,6 +115,29 @@ npm run dev
 | `DB_URL` | 비동기 SQLAlchemy DB URL | `sqlite+aiosqlite:///./stylemate.db` |
 | `AUTO_CREATE_TABLES` | 앱 시작 시 create_all 실행 여부 | `false` |
 
+
+## 🧪 로컬 코디 조합 검증 (AI 호출 없음)
+
+AI 이미지 생성 비용 없이, DB에 저장된 의류 이미지 + 특징(feature)으로 조합 적합도를 확인할 수 있습니다.
+
+### 1) 샘플 데이터 적재
+```bash
+cd backend
+python scripts/import_items.py --csv data/sample_items.csv
+```
+
+### 2) 조합 JSON 확인
+```bash
+GET /api/outfits/preview?gender=women&tpo=office&season=fall&limit=12
+```
+
+### 3) 조합 보드(동시 이미지 확인)
+```bash
+GET /api/outfits/preview-board?gender=women&tpo=office&season=fall&limit=12
+```
+
+브라우저에서 위 URL을 열면 조합 점수/사유와 함께 의류 이미지가 카드 형태로 동시에 표시됩니다.
+
 ## 📜 라이선스
 
 This project is for personal/educational use.

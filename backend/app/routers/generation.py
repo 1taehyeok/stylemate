@@ -1,29 +1,29 @@
-"""
-Generation Router — handles AI image generation requests.
+﻿"""
+Generation Router handles style generation requests.
+Supports AI generation and local outfit-combination fallback.
 """
 import uuid
-import asyncio
 import logging
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+import os
+from collections import defaultdict
 
+from fastapi import APIRouter, Depends, BackgroundTasks
+from PIL import Image
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
 from app.database import get_db
-from app.models import GeneratedImage, ClothingItem
+from app.models import ClothingItem, ClothingItemFeature, GeneratedImage
 from app.schemas import (
     GenerateRequest,
     GenerateResponse,
-    GenerationResultResponse,
     GeneratedImageResponse,
+    GenerationResultResponse,
     ItemResponse,
 )
-from app.config import get_settings
-from app.services.ai_service import (
-    get_ai_provider,
-    build_prompt,
-    build_category,
-    save_image,
-)
+from app.services.ai_service import build_category, build_prompt, get_ai_provider, save_image
+from app.services.outfit_matcher import MatchCandidate, build_outfit_combinations
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["generation"])
@@ -33,7 +33,7 @@ _task_status: dict[str, str] = {}
 
 
 def _format_price(price: int) -> str:
-    return f"₩{price:,}"
+    return f"{price:,}"
 
 
 def _to_item_response(item: ClothingItem) -> ItemResponse:
@@ -51,12 +51,56 @@ def _to_item_response(item: ClothingItem) -> ItemResponse:
     )
 
 
-async def _generate_images_task(
+def _create_combo_collage(
+    image_paths: list[str],
+    images_dir: str,
     task_id: str,
-    request: GenerateRequest,
-    num_images: int = 8,
-):
-    """Background task: generate multiple style images and save to DB."""
+    index: int,
+) -> str | None:
+    """Create a portrait 3:4 collage from outfit item images and return saved filename."""
+    if not image_paths:
+        return None
+
+    # Match frontend card aspect ratio (3:4) to avoid aggressive object-cover cropping.
+    canvas_w = 768
+    canvas_h = 1024
+    padding = 24
+    gap = 18
+
+    loaded: list[Image.Image] = []
+    for relative in image_paths:
+        path = os.path.join(images_dir, relative)
+        if not os.path.exists(path):
+            continue
+        try:
+            loaded.append(Image.open(path).convert("RGB"))
+        except Exception:
+            continue
+
+    if not loaded:
+        return None
+
+    count = min(len(loaded), 3)
+    slot_h = (canvas_h - (padding * 2) - (gap * (count - 1))) // count
+    slot_w = canvas_w - (padding * 2)
+    canvas = Image.new("RGB", (canvas_w, canvas_h), (245, 245, 245))
+
+    y = padding
+    for img in loaded[:count]:
+        fitted = img.copy()
+        fitted.thumbnail((slot_w, slot_h))
+        off_x = padding + (slot_w - fitted.width) // 2
+        off_y = y + (slot_h - fitted.height) // 2
+        canvas.paste(fitted, (off_x, off_y))
+        y += slot_h + gap
+
+    filename = f"combo_{task_id}_{index}.png"
+    canvas.save(os.path.join(images_dir, filename), format="PNG")
+    return filename
+
+
+async def _generate_images_task(task_id: str, request: GenerateRequest, num_images: int = 8):
+    """Background task: generate AI images and save to DB."""
     settings = get_settings()
     provider = get_ai_provider()
 
@@ -64,15 +108,13 @@ async def _generate_images_task(
 
     try:
         from app.database import async_session
+
         async with async_session() as db:
             generated_count = 0
 
             for i in range(num_images):
                 try:
-                    # Vary the prompt slightly for diversity
-                    base_prompt = build_prompt(
-                        request.gender, request.tpo, request.height, request.fit
-                    )
+                    base_prompt = build_prompt(request.gender, request.tpo, request.height, request.fit)
                     variation = [
                         "with a coat and trousers",
                         "with a blazer and slacks",
@@ -89,67 +131,147 @@ async def _generate_images_task(
                     ]
                     full_prompt = f"{base_prompt} Style variation: {variation[i % len(variation)]}"
 
-                    # Generate image
                     image_bytes = await provider.generate_image(
                         prompt=full_prompt,
                         reference_image_b64=request.photo_base64,
                     )
 
-                    # Save to disk
                     filename = await save_image(image_bytes, settings.images_dir)
 
-                    # Save to DB
-                    gen_image = GeneratedImage(
+                    db.add(
+                        GeneratedImage(
+                            task_id=task_id,
+                            prompt=full_prompt,
+                            provider=settings.ai_provider,
+                            image_path=filename,
+                            image_url=f"/static/images/{filename}",
+                            gender=request.gender,
+                            tpo=request.tpo,
+                            height=request.height,
+                            fit=request.fit,
+                            category=build_category(request.tpo, i),
+                        )
+                    )
+                    await db.commit()
+                    generated_count += 1
+                    logger.info("[Task %s] Generated image %s/%s", task_id, generated_count, num_images)
+
+                except Exception as e:
+                    logger.error("[Task %s] Failed to generate image %s: %s", task_id, i + 1, e)
+                    continue
+
+            _task_status[task_id] = "completed" if generated_count > 0 else "failed"
+            logger.info("[Task %s] AI task done. Generated %s/%s images.", task_id, generated_count, num_images)
+
+    except Exception as e:
+        logger.error("[Task %s] AI task failed: %s", task_id, e)
+        _task_status[task_id] = "failed"
+
+
+async def _generate_local_outfit_task(task_id: str, request: GenerateRequest, limit: int = 8):
+    """Background task: create pseudo-generation results from local outfit combinations."""
+    _task_status[task_id] = "processing"
+    settings = get_settings()
+
+    try:
+        from app.database import async_session
+
+        async with async_session() as db:
+            stmt = (
+                select(ClothingItem, ClothingItemFeature)
+                .join(ClothingItemFeature, ClothingItemFeature.item_id == ClothingItem.id)
+            )
+            if request.gender:
+                stmt = stmt.where(ClothingItem.gender == request.gender)
+
+            rows = (await db.execute(stmt.order_by(ClothingItem.id))).all()
+            if not rows:
+                _task_status[task_id] = "failed"
+                return
+
+            groups: dict[str, list[MatchCandidate]] = defaultdict(list)
+            for item, feature in rows:
+                groups[feature.item_type].append(MatchCandidate(item=item, feature=feature))
+
+            combos = build_outfit_combinations(
+                tpo=request.tpo,
+                season=None,
+                tops=groups.get("top", []),
+                bottoms=groups.get("bottom", []),
+                outers=groups.get("outer", []),
+                onepieces=groups.get("onepiece", []),
+                limit=limit,
+            )
+
+            created = 0
+            seen_signatures: set[tuple[int, ...]] = set()
+            for i, combo in enumerate(combos):
+                combo_items = [candidate.item for candidate in combo.items if candidate.item.image_path]
+                if not combo_items:
+                    continue
+
+                signature = tuple(sorted(item.id for item in combo_items))
+                if signature in seen_signatures:
+                    continue
+                seen_signatures.add(signature)
+
+                collage_filename = _create_combo_collage(
+                    image_paths=[item.image_path for item in combo_items if item.image_path],
+                    images_dir=settings.images_dir,
+                    task_id=task_id,
+                    index=i,
+                )
+                if collage_filename is None:
+                    continue
+
+                category = combo_items[0].category or build_category(request.tpo, i)
+                names = ", ".join(item.name for item in combo_items)
+                db.add(
+                    GeneratedImage(
                         task_id=task_id,
-                        prompt=full_prompt,
-                        provider=settings.ai_provider,
-                        image_path=filename,
-                        image_url=f"/static/images/{filename}",
+                        prompt=f"LOCAL_COMBO: {combo.reason} | items: {names}",
+                        provider="local",
+                        image_path=collage_filename,
+                        image_url=f"/static/images/{collage_filename}",
                         gender=request.gender,
                         tpo=request.tpo,
                         height=request.height,
                         fit=request.fit,
-                        category=build_category(request.tpo, i),
+                        category=category,
                     )
-                    db.add(gen_image)
-                    await db.commit()
-                    generated_count += 1
-                    logger.info(f"[Task {task_id}] Generated image {generated_count}/{num_images}")
+                )
+                created += 1
 
-                except Exception as e:
-                    logger.error(f"[Task {task_id}] Failed to generate image {i+1}: {e}")
-                    continue
-
-            _task_status[task_id] = "completed" if generated_count > 0 else "failed"
-            logger.info(f"[Task {task_id}] Done. Generated {generated_count}/{num_images} images.")
+            await db.commit()
+            _task_status[task_id] = "completed" if created > 0 else "failed"
+            logger.info("[Task %s] Local task done. Created %s/%s results.", task_id, created, limit)
 
     except Exception as e:
-        logger.error(f"[Task {task_id}] Task failed: {e}")
+        logger.error("[Task %s] Local task failed: %s", task_id, e)
         _task_status[task_id] = "failed"
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_styles(
-    request: GenerateRequest,
-    background_tasks: BackgroundTasks,
-):
-    """Start AI image generation. Returns a task_id to poll for results."""
+async def generate_styles(request: GenerateRequest, background_tasks: BackgroundTasks):
+    """Start generation and return task_id for polling."""
     task_id = uuid.uuid4().hex[:16]
-
-    # Validate API key before starting
-    try:
-        get_ai_provider()
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+    settings = get_settings()
     _task_status[task_id] = "processing"
-    background_tasks.add_task(_generate_images_task, task_id, request)
 
-    return GenerateResponse(
-        task_id=task_id,
-        status="processing",
-        message="스타일 생성을 시작했습니다. task_id로 결과를 조회해주세요.",
-    )
+    if settings.ai_provider == "local":
+        background_tasks.add_task(_generate_local_outfit_task, task_id, request)
+        message = "Generating local outfit combinations."
+    else:
+        try:
+            get_ai_provider()
+            background_tasks.add_task(_generate_images_task, task_id, request)
+            message = "Style generation started. Poll with task_id for progress."
+        except ValueError:
+            logger.warning("[Task %s] Missing AI key, falling back to local combinations.", task_id)
+            background_tasks.add_task(_generate_local_outfit_task, task_id, request)
+            message = "AI key missing; using local outfit combinations instead."
+
+    return GenerateResponse(task_id=task_id, status="processing", message=message)
 
 
 @router.get("/results/{task_id}", response_model=GenerationResultResponse)

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -35,3 +36,23 @@ class ClothingItem(Base):
     location = Column(String(100), nullable=True)  # store location
     gender = Column(String(10), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+    feature = relationship("ClothingItemFeature", back_populates="item", uselist=False, cascade="all, delete-orphan")
+
+
+class ClothingItemFeature(Base):
+    """Normalized feature table for local outfit matching without AI calls."""
+    __tablename__ = "clothing_item_features"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    item_id = Column(Integer, ForeignKey("clothing_items.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+
+    item_type = Column(String(20), nullable=False)  # top, bottom, outer, onepiece
+    color = Column(String(20), nullable=True)
+    style = Column(String(20), nullable=True)  # casual, formal, sporty
+    season = Column(String(20), nullable=True)  # spring, summer, fall, winter, all
+    fit = Column(String(20), nullable=True)  # slim, regular, over
+    formality = Column(Integer, nullable=True)  # 1-5
+    warmth = Column(Integer, nullable=True)  # 1-5
+
+    item = relationship("ClothingItem", back_populates="feature")
