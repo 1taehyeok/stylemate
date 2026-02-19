@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -56,3 +56,18 @@ class ClothingItemFeature(Base):
     warmth = Column(Integer, nullable=True)  # 1-5
 
     item = relationship("ClothingItem", back_populates="feature")
+
+
+class AdminAuditLog(Base):
+    """Stores admin access and mutation audit logs."""
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String(50), nullable=False, index=True)  # admin_login, item_update
+    success = Column(Boolean, nullable=False, default=False)
+    admin_id = Column(String(100), nullable=True)
+    session_token = Column(String(128), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(300), nullable=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), index=True)

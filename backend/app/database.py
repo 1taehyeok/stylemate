@@ -15,7 +15,7 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 async def init_db():
     """Create all tables."""
     async with engine.begin() as conn:
-        from app.models import GeneratedImage, ClothingItem, ClothingItemFeature  # noqa
+        from app.models import GeneratedImage, ClothingItem, ClothingItemFeature, AdminAuditLog  # noqa
         await conn.run_sync(Base.metadata.create_all)
 
 

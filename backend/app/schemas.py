@@ -9,6 +9,7 @@ class GenerateRequest(BaseModel):
     """Request body for image generation."""
     gender: str  # "women" or "men"
     tpo: str  # "daily", "date", "office", "active"
+    season: Optional[str] = None  # "spring", "summer", "fall", "winter"
     height: float = 165
     fit: Optional[str] = None  # "오버핏", "슬림핏", "정핏"
     photo_base64: Optional[str] = None  # user's photo in base64
@@ -23,6 +24,41 @@ class ItemCreateRequest(BaseModel):
     stock_info: Optional[str] = None
     location: Optional[str] = None
     gender: Optional[str] = None
+
+
+class ItemUpdateRequest(BaseModel):
+    """Request body for updating a clothing item."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[int] = None
+    category: Optional[str] = None
+    stock_info: Optional[str] = None
+    location: Optional[str] = None
+    gender: Optional[str] = None
+
+
+class AdminAuthRequest(BaseModel):
+    password: str
+    device_id: Optional[str] = None
+
+
+class AdminAuthResponse(BaseModel):
+    success: bool
+    message: str
+    session_token: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+
+class AdminLogResponse(BaseModel):
+    id: int
+    event_type: str
+    success: bool
+    admin_id: Optional[str] = None
+    session_token: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    detail: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 # --- Response Schemas ---
@@ -60,6 +96,16 @@ class ItemResponse(BaseModel):
         from_attributes = True
 
 
+class OutfitComboResponse(BaseModel):
+    combo_id: str
+    image_id: int
+    image_url: str
+    category: Optional[str] = None
+    total_price: int
+    total_price_display: str
+    items: list[ItemResponse]
+
+
 class GenerationResultResponse(BaseModel):
     """Full generation result with generated images and recommended catalog items."""
     task_id: str
@@ -67,6 +113,7 @@ class GenerationResultResponse(BaseModel):
     images: list[GeneratedImageResponse]
     total: int
     recommended_items: list[ItemResponse] = Field(default_factory=list)
+    outfit_combos: list[OutfitComboResponse] = Field(default_factory=list)
 
 
 class ClothingFeatureResponse(BaseModel):

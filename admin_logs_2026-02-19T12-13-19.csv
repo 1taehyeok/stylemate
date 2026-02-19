@@ -1,0 +1,4 @@
+id,event_type,success,admin_id,ip_address,created_at,detail
+3,admin_logs_view,True,admin,127.0.0.1,2026-02-19T12:13:12,"{""limit"": 100, ""event_type"": null, ""success"": null, ""date_from"": null, ""date_to"": null, ""price_changes_only"": false}"
+2,admin_logs_view,True,admin,127.0.0.1,2026-02-19T12:13:12,"{""limit"": 100, ""event_type"": null, ""success"": null, ""date_from"": null, ""date_to"": null, ""price_changes_only"": false}"
+1,admin_login,True,admin,127.0.0.1,2026-02-19T12:13:11,"{""device_id"": ""kiosk-main""}"

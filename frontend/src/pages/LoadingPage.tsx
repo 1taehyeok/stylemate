@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore, type Fit, type ResultItem } from '../store'
 import { startGeneration, getGenerationResults, getImageUrl } from '../api'
 import Header from '../components/Header'
 import BackButton from '../components/BackButton'
 
-const fitOptions: Fit[] = ['오버핏', '슬림핏', '정핏']
+const fitOptions: Fit[] = ['슬림핏', '레귤러핏', '오버핏']
 
 const categoryLabelMap: Record<string, string> = {
     daily: '데일리룩',
@@ -15,13 +15,12 @@ const categoryLabelMap: Record<string, string> = {
 }
 
 export default function LoadingPage() {
-    const { nextStep, height, setHeight, fit, setFit, setResults, gender, tpo } = useAppStore()
+    const { nextStep, height, setHeight, fit, setFit, setResults, gender, tpo, season } = useAppStore()
     const [progress, setProgress] = useState(0)
     const [error, setError] = useState<string | null>(null)
     const taskIdRef = useRef<string | null>(null)
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    // Start generation on mount
     useEffect(() => {
         let cancelled = false
 
@@ -30,46 +29,78 @@ export default function LoadingPage() {
                 const res = await startGeneration({
                     gender: gender || 'women',
                     tpo: tpo || 'daily',
+                    season,
                     height,
                     fit,
                 })
                 if (cancelled) return
                 taskIdRef.current = res.task_id
 
-                // Start polling
                 pollingRef.current = setInterval(async () => {
                     if (!taskIdRef.current) return
                     try {
                         const result = await getGenerationResults(taskIdRef.current)
 
                         if (result.status === 'completed' && result.images.length > 0) {
-                            const catalog = result.recommended_items
+                            const combos = result.outfit_combos || []
 
-                            // Convert to ResultItem format using real catalog data
-                            const items: ResultItem[] = result.images.map((img, i) => {
-                                const matched = catalog.length > 0 ? catalog[i % catalog.length] : null
-                                const normalizedCategory = img.category || matched?.category || '추천'
-
-                                return {
-                                    id: img.id,
-                                    imageUrl: getImageUrl(img.image_url),
-                                    name: matched?.name || `스타일 ${i + 1}`,
-                                    price: matched?.price_display || '가격 정보 없음',
-                                    category: categoryLabelMap[normalizedCategory] || normalizedCategory,
-                                    stock: matched?.stock_info || '재고 정보 없음',
-                                    location: matched?.location || '매장 정보 없음',
-                                    description: matched?.description || '상품 설명 없음',
-                                }
-                            })
+                            let items: ResultItem[] = []
+                            if (combos.length > 0) {
+                                items = combos.map((combo, i) => ({
+                                    id: combo.combo_id,
+                                    imageUrl: getImageUrl(combo.image_url),
+                                    name: `코디 ${i + 1}`,
+                                    totalPrice: combo.total_price,
+                                    totalPriceDisplay: `${combo.total_price_display}원`,
+                                    category: categoryLabelMap[combo.category || ''] || combo.category || '추천',
+                                    items: combo.items.map((item) => ({
+                                        id: item.id,
+                                        name: item.name,
+                                        description: item.description || '설명 정보 없음',
+                                        price: item.price,
+                                        priceDisplay: item.price_display,
+                                        category: categoryLabelMap[item.category || ''] || item.category || '추천',
+                                        imageUrl: item.image_url ? getImageUrl(item.image_url) : '',
+                                        stock: item.stock_info || '재고 정보 없음',
+                                        location: item.location || '매장 정보 없음',
+                                    })),
+                                }))
+                            } else {
+                                const catalog = result.recommended_items
+                                items = result.images.map((img, i) => {
+                                    const matched = catalog.length > 0 ? catalog[i % catalog.length] : null
+                                    const singlePrice = matched?.price || 0
+                                    return {
+                                        id: `fallback-${img.id}`,
+                                        imageUrl: getImageUrl(img.image_url),
+                                        name: `코디 ${i + 1}`,
+                                        totalPrice: singlePrice,
+                                        totalPriceDisplay: `${matched?.price_display || '0'}원`,
+                                        category: categoryLabelMap[img.category || ''] || img.category || '추천',
+                                        items: matched
+                                            ? [{
+                                                id: matched.id,
+                                                name: matched.name,
+                                                description: matched.description || '설명 정보 없음',
+                                                price: matched.price,
+                                                priceDisplay: matched.price_display,
+                                                category: categoryLabelMap[matched.category || ''] || matched.category || '추천',
+                                                imageUrl: matched.image_url ? getImageUrl(matched.image_url) : '',
+                                                stock: matched.stock_info || '재고 정보 없음',
+                                                location: matched.location || '매장 정보 없음',
+                                            }]
+                                            : [],
+                                    }
+                                })
+                            }
 
                             setResults(items)
                             if (pollingRef.current) clearInterval(pollingRef.current)
                             setProgress(100)
                         } else if (result.status === 'failed') {
-                            setError('이미지 생성에 실패했습니다. 다시 시도해주세요.')
+                            setError('추천 생성에 실패했습니다. 다시 시도해주세요.')
                             if (pollingRef.current) clearInterval(pollingRef.current)
                         } else {
-                            // Update progress based on images generated so far
                             const targetImages = 8
                             const pct = Math.min(95, Math.round((result.total / targetImages) * 100))
                             setProgress((prev) => Math.max(prev, pct))
@@ -80,7 +111,7 @@ export default function LoadingPage() {
                 }, 2000)
             } catch (e: unknown) {
                 if (!cancelled) {
-                    const message = e instanceof Error ? e.message : '서버 연결에 실패했습니다.'
+                    const message = e instanceof Error ? e.message : '생성 요청에 실패했습니다.'
                     setError(message)
                 }
             }
@@ -94,7 +125,6 @@ export default function LoadingPage() {
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Auto-navigate when complete
     useEffect(() => {
         if (progress >= 100) {
             const timer = setTimeout(() => nextStep(), 800)
@@ -102,7 +132,6 @@ export default function LoadingPage() {
         }
     }, [progress, nextStep])
 
-    // Smooth progress animation (simulate when no real updates yet)
     useEffect(() => {
         if (error) return
         const interval = setInterval(() => {
@@ -118,7 +147,6 @@ export default function LoadingPage() {
         return () => clearInterval(interval)
     }, [error])
 
-    // Circular progress bar dimensions
     const size = 180
     const strokeWidth = 8
     const radius = (size - strokeWidth) / 2
@@ -135,10 +163,9 @@ export default function LoadingPage() {
                     transition={{ delay: 0.2 }}
                     className="text-2xl font-bold text-gray-800 mt-4 mb-10"
                 >
-                    나만을 위한 스타일을 생성 중...
+                    코디를 생성하고 있습니다...
                 </motion.h2>
 
-                {/* Circular Progress */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -164,7 +191,6 @@ export default function LoadingPage() {
                     </div>
                 </motion.div>
 
-                {/* Error */}
                 {error && (
                     <motion.p
                         initial={{ opacity: 0 }}
@@ -175,7 +201,6 @@ export default function LoadingPage() {
                     </motion.p>
                 )}
 
-                {/* Interactive: Height + Fit */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -183,10 +208,9 @@ export default function LoadingPage() {
                     className="w-full max-w-sm"
                 >
                     <p className="text-center text-sm text-gray-500 mb-6 leading-relaxed">
-                        잠깐! 키와 핏을 알려주시면<br />더 정확한 추천이 가능해요!
+                        키와 핏을 알려주시면 더 정확한 추천이 가능합니다.
                     </p>
 
-                    {/* Fit Selection */}
                     <div className="flex gap-3 justify-center mb-6">
                         {fitOptions.map((option) => (
                             <motion.button
@@ -204,14 +228,13 @@ export default function LoadingPage() {
                         ))}
                     </div>
 
-                    {/* Height Input */}
                     <div className="flex items-center justify-center gap-4">
                         <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden">
                             <button
                                 onClick={() => setHeight(Math.max(100, height - 1))}
                                 className="px-4 py-3 text-gray-500 hover:bg-gray-50 text-lg font-medium"
                             >
-                                −
+                                -
                             </button>
                             <span className="px-4 py-3 text-lg font-semibold text-gray-800 min-w-[60px] text-center">
                                 {height}
@@ -223,7 +246,7 @@ export default function LoadingPage() {
                                 +
                             </button>
                         </div>
-                        <span className="text-sm text-gray-400">키 (cm)</span>
+                        <span className="text-sm text-gray-400">cm</span>
                     </div>
                 </motion.div>
             </div>

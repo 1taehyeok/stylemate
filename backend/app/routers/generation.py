@@ -5,6 +5,7 @@ Supports AI generation and local outfit-combination fallback.
 import uuid
 import logging
 import os
+import re
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, BackgroundTasks
@@ -21,6 +22,7 @@ from app.schemas import (
     GeneratedImageResponse,
     GenerationResultResponse,
     ItemResponse,
+    OutfitComboResponse,
 )
 from app.services.ai_service import build_category, build_prompt, get_ai_provider, save_image
 from app.services.outfit_matcher import MatchCandidate, build_outfit_combinations
@@ -49,6 +51,26 @@ def _to_item_response(item: ClothingItem) -> ItemResponse:
         location=item.location,
         gender=item.gender,
     )
+
+
+_ITEM_IDS_PATTERN = re.compile(r"item_ids:([0-9,]+)")
+
+
+def _parse_item_ids_from_prompt(prompt: str) -> list[int]:
+    match = _ITEM_IDS_PATTERN.search(prompt or "")
+    if not match:
+        return []
+    raw = match.group(1)
+    parsed: list[int] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            parsed.append(int(token))
+        except ValueError:
+            continue
+    return parsed
 
 
 def _create_combo_collage(
@@ -195,7 +217,7 @@ async def _generate_local_outfit_task(task_id: str, request: GenerateRequest, li
 
             combos = build_outfit_combinations(
                 tpo=request.tpo,
-                season=None,
+                season=request.season,
                 tops=groups.get("top", []),
                 bottoms=groups.get("bottom", []),
                 outers=groups.get("outer", []),
@@ -226,10 +248,11 @@ async def _generate_local_outfit_task(task_id: str, request: GenerateRequest, li
 
                 category = combo_items[0].category or build_category(request.tpo, i)
                 names = ", ".join(item.name for item in combo_items)
+                item_ids = ",".join(str(item.id) for item in combo_items)
                 db.add(
                     GeneratedImage(
                         task_id=task_id,
-                        prompt=f"LOCAL_COMBO: {combo.reason} | items: {names}",
+                        prompt=f"LOCAL_COMBO: {combo.reason} | item_ids:{item_ids} | items: {names}",
                         provider="local",
                         image_path=collage_filename,
                         image_url=f"/static/images/{collage_filename}",
@@ -287,6 +310,7 @@ async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
     images = result.scalars().all()
 
     recommended_items: list[ClothingItem] = []
+    outfit_combos: list[OutfitComboResponse] = []
 
     if images:
         gender = images[0].gender
@@ -307,6 +331,58 @@ async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
             fallback_result = await db.execute(fallback_query.order_by(ClothingItem.id.desc()).limit(12))
             recommended_items = fallback_result.scalars().all()
 
+        recommended_by_category: dict[str, list[ClothingItem]] = defaultdict(list)
+        for item in recommended_items:
+            if item.category:
+                recommended_by_category[item.category].append(item)
+
+        local_image_item_ids: dict[int, list[int]] = {}
+        all_local_item_ids: set[int] = set()
+        for image in images:
+            if image.provider != "local":
+                continue
+            parsed_ids = _parse_item_ids_from_prompt(image.prompt)
+            if not parsed_ids:
+                continue
+            local_image_item_ids[image.id] = parsed_ids
+            all_local_item_ids.update(parsed_ids)
+
+        local_item_map: dict[int, ClothingItem] = {}
+        if all_local_item_ids:
+            local_items_result = await db.execute(
+                select(ClothingItem).where(ClothingItem.id.in_(all_local_item_ids))
+            )
+            local_item_map = {item.id: item for item in local_items_result.scalars().all()}
+
+        for image in images:
+            combo_items: list[ClothingItem] = []
+
+            parsed_ids = local_image_item_ids.get(image.id, [])
+            if parsed_ids:
+                combo_items = [local_item_map[item_id] for item_id in parsed_ids if item_id in local_item_map]
+            else:
+                category_items = recommended_by_category.get(image.category or "", [])
+                if category_items:
+                    combo_items = category_items[:3]
+                elif recommended_items:
+                    combo_items = recommended_items[:3]
+
+            if not combo_items:
+                continue
+
+            total_price = sum(item.price for item in combo_items)
+            outfit_combos.append(
+                OutfitComboResponse(
+                    combo_id=f"combo-{task_id}-{image.id}",
+                    image_id=image.id,
+                    image_url=image.image_url,
+                    category=image.category,
+                    total_price=total_price,
+                    total_price_display=_format_price(total_price),
+                    items=[_to_item_response(item) for item in combo_items],
+                )
+            )
+
     return GenerationResultResponse(
         task_id=task_id,
         status=status,
@@ -322,4 +398,5 @@ async def get_results(task_id: str, db: AsyncSession = Depends(get_db)):
         ],
         total=len(images),
         recommended_items=[_to_item_response(item) for item in recommended_items],
+        outfit_combos=outfit_combos,
     )

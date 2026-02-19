@@ -148,3 +148,81 @@ This project is for personal/educational use.
 - 마이그레이션 생성/적용은 Alembic을 사용합니다.
 - 운영 환경에서는 `AUTO_CREATE_TABLES=false`를 유지하고 `alembic upgrade head`로 스키마를 관리하세요.
 - 샘플 데이터는 `backend/data/sample_items.csv`와 `backend/scripts/import_items.py`를 사용해 적재할 수 있습니다.
+
+## Recent Updates (2026-02-19)
+
+### 1) Outfit Recommendation Flow Improvements
+- Added `season` selection in the kiosk flow and connected it to backend local outfit matching.
+- Recommendation result is now combo-centric (`outfit_combos`) instead of single-item mapping.
+- Combo price is now calculated as the sum of all items in the outfit combo.
+- Outfit detail page now shows per-item details in the selected combo:
+  - item image
+  - item name/description
+  - category
+  - stock/location
+  - item price
+
+### 2) Kiosk UX Enhancements
+- Added global `Home` button on non-landing pages.
+- Added idle detection (20 seconds):
+  - If there is no interaction for 20 seconds, a popup asks whether to return to Home.
+- Added hidden admin entry on landing page:
+  - Tap `STYLE ME UP` multiple times to open admin password prompt.
+
+### 3) Admin Auth (Hash + .env) and Audit Logging
+- Admin password verification moved to backend API (no hardcoded frontend password check).
+- Password is verified with hash from environment variables.
+- Added admin session token issuance and validation.
+- Added audit logging for:
+  - admin login attempts (`admin_login`)
+  - admin log views (`admin_logs_view`)
+  - admin CSV exports (`admin_logs_export_csv`)
+  - item updates (`item_update`) including before/after values
+
+### 4) New/Changed Backend APIs
+- `POST /api/admin/auth`
+  - Body: `{ "password": "...", "device_id": "..." }`
+  - Returns admin session token on success.
+- `GET /api/admin/logs`
+  - Requires header: `X-Admin-Session`
+  - Supports filters:
+    - `limit`
+    - `event_type`
+    - `success`
+    - `date_from` (`YYYY-MM-DD`)
+    - `date_to` (`YYYY-MM-DD`)
+    - `price_changes_only` (`true/false`)
+- `GET /api/admin/logs/export.csv`
+  - Requires header: `X-Admin-Session`
+  - Supports same filters as `/api/admin/logs`
+  - Downloads CSV.
+- `PATCH /api/items/{item_id}`
+  - Now requires header: `X-Admin-Session`
+  - Unauthorized update attempts are also logged.
+
+### 5) New Environment Variables
+Add these in `backend/.env`:
+
+```env
+ADMIN_PASSWORD_HASH=9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0
+ADMIN_PASSWORD_SALT=
+ADMIN_SESSION_TTL_MINUTES=480
+```
+
+Notes:
+- The default hash above is SHA-256 of `0000` (for temporary/dev usage).
+- For production, use a stronger password and rotate regularly.
+- Supported hash formats:
+  - plain hash: `sha256(salt + password)` in hex (salt from `ADMIN_PASSWORD_SALT`)
+  - inline format: `sha256$<salt>$<hash>`
+
+### 6) DB Migration
+A new Alembic migration was added for admin audit logs table:
+- `backend/alembic/versions/20260219_0003_add_admin_audit_logs.py`
+
+Apply migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```

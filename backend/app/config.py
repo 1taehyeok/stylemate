@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     images_dir: str = ""
     db_url: str = ""
     auto_create_tables: bool = False
+    admin_password_hash: str = "9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0"  # sha256("0000")
+    admin_password_salt: str = ""
+    admin_session_ttl_minutes: int = 480
 
     def model_post_init(self, __context):
         if not self.images_dir:
