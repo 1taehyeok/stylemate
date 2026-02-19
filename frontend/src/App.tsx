@@ -45,7 +45,6 @@ function App() {
 
   useEffect(() => {
     if (isLandingPage) {
-      setShowIdleModal(false)
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current)
       }
@@ -57,6 +56,7 @@ function App() {
         clearTimeout(idleTimerRef.current)
       }
       idleTimerRef.current = setTimeout(() => {
+        setIdleModalCountdown(10)
         setShowIdleModal(true)
       }, IDLE_TIMEOUT_MS)
     }
@@ -87,10 +87,12 @@ function App() {
 
   const handleStayHere = () => {
     setShowIdleModal(false)
+    setIdleModalCountdown(10)
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current)
     }
     idleTimerRef.current = setTimeout(() => {
+      setIdleModalCountdown(10)
       setShowIdleModal(true)
     }, IDLE_TIMEOUT_MS)
   }
@@ -98,7 +100,6 @@ function App() {
   useEffect(() => {
     if (!showIdleModal) return
 
-    setIdleModalCountdown(10)
     const timer = setInterval(() => {
       setIdleModalCountdown((prev) => {
         if (prev <= 1) {
@@ -132,12 +133,12 @@ function App() {
         </motion.div>
       </AnimatePresence>
 
-      {showIdleModal && (
+      {!isLandingPage && showIdleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-800">처음으로 돌아갈까요?</h3>
             <p className="mt-2 text-sm text-gray-500">
-              {` ${idleModalCountdown}초 후 자동으로 처음으로 이동합니다.`}
+              {idleModalCountdown}초 후 자동으로 처음으로 이동합니다.
             </p>
             <div className="mt-4 flex gap-2">
               <button
