@@ -44,7 +44,7 @@ export default function ItemDetailPage() {
                             {hasRealImage ? (
                                 <img src={selectedItem.imageUrl} alt={selectedItem.name} className="w-full h-full object-cover" />
                             ) : (
-                                <div className="h-full min-h-52 flex items-center justify-center text-xs text-gray-400">No image</div>
+                                <div className="h-full min-h-52 flex items-center justify-center text-xs text-gray-400">이미지 없음</div>
                             )}
                         </div>
                         <div className="flex-1">
@@ -63,7 +63,7 @@ export default function ItemDetailPage() {
                                     {item.imageUrl ? (
                                         <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">No image</div>
+                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">이미지 없음</div>
                                     )}
                                 </div>
                                 <div className="flex-1 text-sm text-gray-600">

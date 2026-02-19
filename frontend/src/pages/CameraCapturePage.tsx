@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera } from 'lucide-react'
 import { useAppStore } from '../store'
@@ -6,35 +6,114 @@ import Header from '../components/Header'
 import BackButton from '../components/BackButton'
 
 export default function CameraCapturePage() {
-    const { nextStep, setPhotoUrl } = useAppStore()
+    const { nextStep, setPhotoUrl, photoUrl } = useAppStore()
     const [countdown, setCountdown] = useState<number | null>(null)
     const [captured, setCaptured] = useState(false)
+    const [cameraReady, setCameraReady] = useState(false)
+    const [cameraError, setCameraError] = useState<string | null>(null)
+
+    const videoRef = useRef<HTMLVideoElement | null>(null)
+    const canvasRef = useRef<HTMLCanvasElement | null>(null)
+    const streamRef = useRef<MediaStream | null>(null)
+
+    useEffect(() => {
+        let active = true
+
+        const initCamera = async () => {
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setCameraError('이 브라우저는 카메라를 지원하지 않습니다.')
+                return
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                    audio: false,
+                })
+                if (!active) {
+                    stream.getTracks().forEach((track) => track.stop())
+                    return
+                }
+
+                streamRef.current = stream
+                const video = videoRef.current
+                if (video) {
+                    video.srcObject = stream
+                    await video.play()
+                }
+                setCameraReady(true)
+                setCameraError(null)
+            } catch {
+                setCameraError('카메라 권한이 필요합니다. 권한을 허용한 뒤 다시 시도해주세요.')
+                setCameraReady(false)
+            }
+        }
+
+        initCamera()
+
+        return () => {
+            active = false
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop())
+                streamRef.current = null
+            }
+        }
+    }, [])
+
+    const capturePhoto = useCallback((): string | null => {
+        const video = videoRef.current
+        const canvas = canvasRef.current
+        if (!video || !canvas || video.videoWidth === 0 || video.videoHeight === 0) {
+            return null
+        }
+
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+            return null
+        }
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        return canvas.toDataURL('image/jpeg', 0.92)
+    }, [])
 
     const startCapture = useCallback(() => {
+        if (!cameraReady || cameraError || captured) return
         setCountdown(3)
-    }, [])
+    }, [cameraReady, cameraError, captured])
 
     useEffect(() => {
         if (countdown === null) return
         if (countdown === 0) {
-            // Defer state updates to avoid cascading renders in effect
             queueMicrotask(() => {
+                const dataUrl = capturePhoto()
+                if (!dataUrl) {
+                    setCameraError('촬영에 실패했습니다. 다시 시도해주세요.')
+                    setCountdown(null)
+                    return
+                }
                 setCaptured(true)
-                setPhotoUrl('/placeholder-photo.jpg')
+                setPhotoUrl(dataUrl)
                 setCountdown(null)
             })
             return
         }
         const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
         return () => clearTimeout(timer)
-    }, [countdown, setPhotoUrl])
+    }, [countdown, capturePhoto, setPhotoUrl])
 
     const handleRetake = () => {
         setCaptured(false)
         setPhotoUrl(null)
+        setCountdown(null)
     }
 
     const handleUsePhoto = () => {
+        if (!captured || !photoUrl) {
+            setCameraError('먼저 사진을 촬영해주세요.')
+            return
+        }
         nextStep()
     }
 
@@ -52,33 +131,24 @@ export default function CameraCapturePage() {
                     전신 사진을 촬영해주세요
                 </motion.h2>
 
-                {/* Camera Viewfinder */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.5 }}
-                    className="relative w-72 h-96 bg-gradient-to-b from-gray-200 to-gray-300 
-                     rounded-xl overflow-hidden shadow-inner flex items-center justify-center"
-                    style={{
-                        perspective: '600px',
-                    }}
+                    className="relative w-72 h-96 bg-black rounded-xl overflow-hidden shadow-inner flex items-center justify-center"
                 >
-                    {/* 3D Room effect */}
-                    <div className="absolute inset-4 border border-gray-400/30 rounded-lg"
-                        style={{
-                            background: 'linear-gradient(180deg, rgba(200,200,200,0.3) 0%, rgba(180,180,180,0.5) 100%)',
-                        }}
-                    />
+                    {captured && photoUrl ? (
+                        <img src={photoUrl} alt="captured" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                        <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="absolute inset-0 w-full h-full object-cover"
+                        />
+                    )}
 
-                    {/* Body Silhouette Guide */}
-                    <svg className="relative z-10 w-24 h-64 text-gray-400/60" viewBox="0 0 80 200" fill="none" stroke="currentColor" strokeWidth="1">
-                        <ellipse cx="40" cy="22" rx="14" ry="16" />
-                        <path d="M28 38 Q22 45 20 70 L22 110 L32 110 L35 80 L40 100 L45 80 L48 110 L58 110 L60 70 Q58 45 52 38" />
-                        <path d="M32 110 L28 180" />
-                        <path d="M48 110 L52 180" />
-                    </svg>
-
-                    {/* Countdown */}
                     <AnimatePresence>
                         {countdown !== null && countdown > 0 && (
                             <motion.div
@@ -93,7 +163,6 @@ export default function CameraCapturePage() {
                         )}
                     </AnimatePresence>
 
-                    {/* Flash effect */}
                     <AnimatePresence>
                         {countdown === 0 && (
                             <motion.div
@@ -105,35 +174,36 @@ export default function CameraCapturePage() {
                         )}
                     </AnimatePresence>
 
-                    {/* Captured overlay */}
                     {captured && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="absolute inset-0 bg-gray-300/80 flex items-center justify-center z-20"
+                            className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-full z-20"
                         >
-                            <span className="text-lg text-white font-semibold bg-black/40 px-4 py-2 rounded-full">
-                                ✓ 촬영 완료
-                            </span>
+                            촬영 완료
                         </motion.div>
                     )}
                 </motion.div>
 
-                {/* Countdown hint */}
-                {!captured && countdown === null && (
+                {!captured && countdown === null && !cameraError && (
                     <motion.p
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.6 }}
-                        className="mt-4 text-sm text-gray-400 flex items-center gap-1"
+                        className="mt-4 text-sm text-gray-500 flex items-center gap-1"
                     >
                         <Camera className="w-4 h-4" />
-                        3초 후 자동 촬영
+                        버튼을 누르면 3초 후 촬영됩니다
                     </motion.p>
                 )}
+
+                {cameraError && (
+                    <p className="mt-4 text-sm text-red-500 text-center">{cameraError}</p>
+                )}
+
+                <canvas ref={canvasRef} className="hidden" />
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col items-center gap-3 w-full max-w-sm">
                 <div className="flex items-center justify-center gap-6 w-full">
                     <motion.button
@@ -148,8 +218,9 @@ export default function CameraCapturePage() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={startCapture}
-                        className="w-16 h-16 rounded-full bg-white border-4 border-gray-300 
-                         flex items-center justify-center shadow-md hover:shadow-lg transition-shadow"
+                        disabled={!cameraReady || !!cameraError || captured}
+                        className="w-16 h-16 rounded-full bg-white border-4 border-gray-300
+                         flex items-center justify-center shadow-md hover:shadow-lg transition-shadow disabled:opacity-40"
                     >
                         <Camera className="w-7 h-7 text-gray-600" />
                     </motion.button>

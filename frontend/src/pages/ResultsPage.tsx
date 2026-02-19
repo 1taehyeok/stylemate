@@ -2,7 +2,6 @@
 import { motion } from 'framer-motion'
 import { useAppStore } from '../store'
 import Header from '../components/Header'
-import BackButton from '../components/BackButton'
 
 export default function ResultsPage() {
     const { results, setSelectedItem, nextStep } = useAppStore()
@@ -90,7 +89,7 @@ export default function ResultsPage() {
                                             loading="lazy"
                                         />
                                     ) : (
-                                        <div className="text-xs text-gray-400">No image</div>
+                                        <div className="text-xs text-gray-400">이미지 없음</div>
                                     )}
                                 </div>
                                 <div className="p-3 text-left">
@@ -105,10 +104,7 @@ export default function ResultsPage() {
             </div>
 
             <div className="flex-shrink-0 px-6 py-4 bg-white border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">총 {results.length}개 코디</span>
-                    <BackButton />
-                </div>
+                <span className="text-sm text-gray-500">총 {results.length}개 코디</span>
             </div>
         </div>
     )

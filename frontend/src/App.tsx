@@ -40,6 +40,7 @@ function App() {
   const PageComponent = isAdminPage ? AdminPage : (pages[currentStep] || LandingPage)
 
   const [showIdleModal, setShowIdleModal] = useState(false)
+  const [idleModalCountdown, setIdleModalCountdown] = useState(10)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -94,6 +95,25 @@ function App() {
     }, IDLE_TIMEOUT_MS)
   }
 
+  useEffect(() => {
+    if (!showIdleModal) return
+
+    setIdleModalCountdown(10)
+    const timer = setInterval(() => {
+      setIdleModalCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          setShowIdleModal(false)
+          reset()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [showIdleModal, reset])
+
   return (
     <div className="w-full h-full overflow-hidden bg-gray-50">
       {!isLandingPage && <HomeButton />}
@@ -116,7 +136,9 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6">
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-800">처음으로 돌아갈까요?</h3>
-            <p className="mt-2 text-sm text-gray-500">20초 동안 입력이 없어 홈으로 이동할 수 있습니다.</p>
+            <p className="mt-2 text-sm text-gray-500">
+              {` ${idleModalCountdown}초 후 자동으로 처음으로 이동합니다.`}
+            </p>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"

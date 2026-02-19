@@ -15,14 +15,26 @@ const categoryLabelMap: Record<string, string> = {
 }
 
 export default function LoadingPage() {
-    const { nextStep, height, setHeight, fit, setFit, setResults, gender, tpo, season } = useAppStore()
+    const { nextStep, prevStep, height, setHeight, fit, setFit, setResults, gender, tpo, season, photoUrl } = useAppStore()
     const [progress, setProgress] = useState(0)
     const [error, setError] = useState<string | null>(null)
+    const [retrySeed, setRetrySeed] = useState(0)
     const taskIdRef = useRef<string | null>(null)
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     useEffect(() => {
         let cancelled = false
+
+        const clearPolling = () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+                pollingRef.current = null
+            }
+        }
+
+        setError(null)
+        setProgress(0)
+        setResults([])
 
         const start = async () => {
             try {
@@ -32,6 +44,7 @@ export default function LoadingPage() {
                     season,
                     height,
                     fit,
+                    photo_base64: photoUrl,
                 })
                 if (cancelled) return
                 taskIdRef.current = res.task_id
@@ -43,63 +56,38 @@ export default function LoadingPage() {
 
                         if (result.status === 'completed' && result.images.length > 0) {
                             const combos = result.outfit_combos || []
-
-                            let items: ResultItem[] = []
-                            if (combos.length > 0) {
-                                items = combos.map((combo, i) => ({
-                                    id: combo.combo_id,
-                                    imageUrl: getImageUrl(combo.image_url),
-                                    name: `코디 ${i + 1}`,
-                                    totalPrice: combo.total_price,
-                                    totalPriceDisplay: `${combo.total_price_display}원`,
-                                    category: categoryLabelMap[combo.category || ''] || combo.category || '추천',
-                                    items: combo.items.map((item) => ({
-                                        id: item.id,
-                                        name: item.name,
-                                        description: item.description || '설명 정보 없음',
-                                        price: item.price,
-                                        priceDisplay: item.price_display,
-                                        category: categoryLabelMap[item.category || ''] || item.category || '추천',
-                                        imageUrl: item.image_url ? getImageUrl(item.image_url) : '',
-                                        stock: item.stock_info || '재고 정보 없음',
-                                        location: item.location || '매장 정보 없음',
-                                    })),
-                                }))
-                            } else {
-                                const catalog = result.recommended_items
-                                items = result.images.map((img, i) => {
-                                    const matched = catalog.length > 0 ? catalog[i % catalog.length] : null
-                                    const singlePrice = matched?.price || 0
-                                    return {
-                                        id: `fallback-${img.id}`,
-                                        imageUrl: getImageUrl(img.image_url),
-                                        name: `코디 ${i + 1}`,
-                                        totalPrice: singlePrice,
-                                        totalPriceDisplay: `${matched?.price_display || '0'}원`,
-                                        category: categoryLabelMap[img.category || ''] || img.category || '추천',
-                                        items: matched
-                                            ? [{
-                                                id: matched.id,
-                                                name: matched.name,
-                                                description: matched.description || '설명 정보 없음',
-                                                price: matched.price,
-                                                priceDisplay: matched.price_display,
-                                                category: categoryLabelMap[matched.category || ''] || matched.category || '추천',
-                                                imageUrl: matched.image_url ? getImageUrl(matched.image_url) : '',
-                                                stock: matched.stock_info || '재고 정보 없음',
-                                                location: matched.location || '매장 정보 없음',
-                                            }]
-                                            : [],
-                                    }
-                                })
+                            if (combos.length === 0) {
+                                setError('추천 결과가 비어 있습니다. 다시 시도하거나 이전 단계로 돌아가세요.')
+                                clearPolling()
+                                return
                             }
 
+                            const items: ResultItem[] = combos.map((combo, i) => ({
+                                id: combo.combo_id,
+                                imageUrl: getImageUrl(combo.image_url),
+                                name: `코디 ${i + 1}`,
+                                totalPrice: combo.total_price,
+                                totalPriceDisplay: `${combo.total_price_display}원`,
+                                category: categoryLabelMap[combo.category || ''] || combo.category || '추천',
+                                items: combo.items.map((item) => ({
+                                    id: item.id,
+                                    name: item.name,
+                                    description: item.description || '정보 없음',
+                                    price: item.price,
+                                    priceDisplay: item.price_display,
+                                    category: categoryLabelMap[item.category || ''] || item.category || '추천',
+                                    imageUrl: item.image_url ? getImageUrl(item.image_url) : '',
+                                    stock: item.stock_info || '정보 없음',
+                                    location: item.location || '정보 없음',
+                                })),
+                            }))
+
                             setResults(items)
-                            if (pollingRef.current) clearInterval(pollingRef.current)
+                            clearPolling()
                             setProgress(100)
                         } else if (result.status === 'failed') {
                             setError('추천 생성에 실패했습니다. 다시 시도해주세요.')
-                            if (pollingRef.current) clearInterval(pollingRef.current)
+                            clearPolling()
                         } else {
                             const targetImages = 8
                             const pct = Math.min(95, Math.round((result.total / targetImages) * 100))
@@ -107,6 +95,10 @@ export default function LoadingPage() {
                         }
                     } catch (e) {
                         console.error('Polling error:', e)
+                        if (!cancelled) {
+                            setError('결과 조회 중 오류가 발생했습니다. 다시 시도해주세요.')
+                            clearPolling()
+                        }
                     }
                 }, 2000)
             } catch (e: unknown) {
@@ -121,9 +113,9 @@ export default function LoadingPage() {
 
         return () => {
             cancelled = true
-            if (pollingRef.current) clearInterval(pollingRef.current)
+            clearPolling()
         }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [retrySeed]) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (progress >= 100) {
@@ -192,13 +184,29 @@ export default function LoadingPage() {
                 </motion.div>
 
                 {error && (
-                    <motion.p
+                    <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="text-sm text-red-500 mb-4 text-center"
+                        className="mb-4 w-full max-w-sm"
                     >
-                        {error}
-                    </motion.p>
+                        <p className="text-sm text-red-500 text-center mb-3">{error}</p>
+                        <div className="flex items-center justify-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setRetrySeed((prev) => prev + 1)}
+                                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700"
+                            >
+                                재시도
+                            </button>
+                            <button
+                                type="button"
+                                onClick={prevStep}
+                                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700"
+                            >
+                                이전 단계
+                            </button>
+                        </div>
+                    </motion.div>
                 )}
 
                 <motion.div

@@ -2,6 +2,30 @@
 
 아래는 현재 repo 구조를 기준으로 바로 이슈 트래킹 도구(GitHub Issues/Jira)에 옮길 수 있는 형태로 정리한 작업 목록입니다.
 
+## 상태 요약 (2026-02-19 코드 기준)
+
+- 완료(✅): DB-1, BE-1, BE-3
+- 부분완료(🟡): FE-1, FE-2
+- 미완료(⬜): DB-2, DB-3, BE-2, BE-4, FE-3, FE-4, OPS-1, OPS-2, OPS-3
+
+### 완료(✅)
+- `DB-1` Alembic 마이그레이션 체계 도입 및 실행 문서화 반영
+- `BE-1` `/api/results/{task_id}` 응답에 `recommended_items` 포함
+- `BE-3` CSV 기반 카탈로그 업서트 스크립트(`backend/scripts/import_items.py`) 반영
+
+### 부분완료(🟡)
+- `FE-1` 결과 API 기반 바인딩은 반영됐지만 fallback 매칭/문구가 일부 남아 있음
+- `FE-2` 상세 렌더링 구조는 개선됐지만 placeholder/fallback 텍스트가 일부 남아 있음
+
+### 미완료(⬜)
+- `DB-2` 생성 이미지-상품 N:M 매핑 테이블(`generated_image_items`) 미도입
+- `DB-3` `stock_info`/`category` 정규화 미완료
+- `BE-2` `limit`/`offset`/`sort` 파라미터 미구현
+- `BE-4` 백엔드 API 테스트 파일 미작성
+- `FE-3` 재시도 버튼/복귀 UX 등 실패 대응 동작 미흡
+- `FE-4` 프론트 테스트 파일 미작성
+- `OPS-1`~`OPS-3` 운영 환경 분리/품질 체크리스트/메트릭 체계 미완료
+
 ---
 
 ## Epic 1) DB 스키마/마이그레이션 체계 정비
